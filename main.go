@@ -113,3 +113,16 @@ func readConfig(file string) ([]string, error) {
 	return strings.Split(string(content), ";"), nil
 
 }
+
+func writeExcel() {
+	xlsx := excelize.NewFile()
+
+	xlsx.SetCellValue("Sheet1", "B2", 100)
+	// Set active sheet of the workbook.
+	xlsx.SetActiveSheet(index)
+	// Save xlsx file by the given path.
+	err := xlsx.SaveAs("./Book1.xlsx")
+	if err != nil {
+		fmt.Println(err)
+	}
+}
