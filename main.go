@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -13,31 +12,57 @@ import (
 )
 
 var excel = make([]string, 2)
+var data = make([][]string, 2)
 
 func main() {
 
-	cells, err := readConfig("cfg.conf")
-	folder := "C:\\_test"
-
-	err = iterateFolder2(folder)
+	cells, sheet, err := readConfig("cfg.conf")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
+		fmt.Scanln() // wait for Enter Key
 	}
 
+	if len(os.Args) != 2 {
+		log.Fatalln(err)
+		fmt.Scanln() // wait for Enter Key
+	}
+	folder := os.Args[1]
+	//folder := "C:\\Users\\sacoa002036\\Desktop\\CS_Aramco"
+
+	log.Println("Scanning Sub Directory... ", folder)
+	err = iterateFolder(folder)
+	if err != nil {
+		log.Fatal(err)
+		fmt.Scanln() // wait for Enter Key
+	}
+	log.Println("Scanning Done")
+
+	fmt.Println("Reading excel content...")
 	for _, ff := range excel {
 		if ff != "" {
 			log.Println(ff)
 
-			_, err := readExcel(ff, cells)
+			d, err := readExcel(ff, cells, sheet)
+			data = append(data, d)
+
 			if err != nil {
 				log.Fatal(err)
+				fmt.Scanln() // wait for Enter Key
 			}
 		}
 	}
+	log.Println("Reading Done")
 
+	err = writeExcel(data, folder)
+	if err != nil {
+		log.Fatalln(err)
+		fmt.Scanln() // wait for Enter Key
+	}
+
+	fmt.Scanln() // wait for Enter Key
 }
 
-func iterateFolder(folder string) error {
+func iterateFolder_hold(folder string) error {
 
 	contentFolder, err := ioutil.ReadDir(folder)
 	if err != nil {
@@ -51,78 +76,88 @@ func iterateFolder(folder string) error {
 	return nil
 }
 
-func iterateFolder2(folder string) error {
+func iterateFolder(folder string) error {
+
+	dirCount := 0
+	fileCount := 0
+	excelCount := 0
 
 	os.Chdir(folder)
 
-	subDirToSkip := "skip"
-
 	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Println(err)
 			return err
 		}
-		if info.IsDir() && info.Name() == subDirToSkip {
-			fmt.Printf("skipped: %+v \n", info.Name())
-			return filepath.SkipDir
+		if info.IsDir() {
+			dirCount++
 		}
+
 		if !info.IsDir() {
-			if strings.HasSuffix(path, ".xlsx") || strings.HasSuffix(path, ".xls") {
-				fmt.Printf("excel: %q\n", folder+"\\"+path)
+			p := strings.ToLower(path)
+			if strings.HasSuffix(p, ".xlsx") || strings.HasSuffix(p, ".xls") {
 				excel = append(excel, folder+"\\"+path)
+				excelCount++
 			} else {
-				fmt.Printf("file: %q\n", folder+"\\"+path)
+				fileCount++
 			}
 		}
 
 		return nil
 	})
 	if err != nil {
-		log.Println("error walking the path %q: %v\n", folder, err)
 		return err
 	}
 
+	fmt.Println("Scanned directory: ", dirCount, "\nScanned Excel: ", excelCount, "\nScanned File: ", fileCount)
 	return nil
 }
 
-func readExcel(file string, cells []string) ([]string, error) {
+func readExcel(file string, cells []string, sheet string) ([]string, error) {
 
 	data := make([]string, len(cells)+2)
-	data[0] = path.Dir(file)
-	data[1] = path.Base(file)
+	data[0], data[1] = filepath.Split(file)
 
 	xlsx, err := excelize.OpenFile(file)
 	if err != nil {
 		return nil, err
 	}
+	//maps := xlsx.GetSheetMap()
 
 	for i, c := range cells {
-		data[i+2] = xlsx.GetCellValue("Sheet1", c)
+		data[i+2] = xlsx.GetCellValue("3doCS", c)
 	}
 
-	fmt.Println(data)
+	//fmt.Println(data)
 	return data, nil
 }
 
-func readConfig(file string) ([]string, error) {
+func readConfig(file string) ([]string, string, error) {
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return strings.Split(string(content), ";"), nil
+	sheet := strings.Split(string(content), ":")
+	cells := strings.Split(sheet[1], ";")
+	return cells, sheet[0], nil
 
 }
 
-func writeExcel() {
+func writeExcel(data [][]string, folder string) error {
 	xlsx := excelize.NewFile()
 
-	xlsx.SetCellValue("Sheet1", "B2", 100)
-	// Set active sheet of the workbook.
-	xlsx.SetActiveSheet(index)
-	// Save xlsx file by the given path.
-	err := xlsx.SaveAs("./Book1.xlsx")
-	if err != nil {
-		fmt.Println(err)
+	for irow, row := range data {
+		for icol, collum := range row {
+			cell := fmt.Sprint(excelize.ToAlphaString(icol), irow)
+			xlsx.SetCellValue("Sheet1", cell, collum)
+		}
 	}
+	// Set active sheet of the workbook.
+	xlsx.SetActiveSheet(1)
+	// Save xlsx file by the given path.
+	err := xlsx.SaveAs(folder + "\\Summary.xlsx")
+	if err != nil {
+		return err
+	}
+	return nil
 }
